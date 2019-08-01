@@ -1,0 +1,207 @@
+<html>
+	<head>
+		<title>Kotus-etsijä (sanaristikkohelper -edition)</title>
+		<meta charset="utf-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+
+		<link rel="stylesheet" href="node_modules/bootstrap/dist/css/bootstrap.min.css">
+		<style>
+			#container {
+				background: #fff;
+				padding: 0px;
+				margin-top: 1em;
+					border-radius: 5px;
+			}
+			#container .list-group {
+				margin: 0px;
+			}
+			#container .list-group-item {
+				border-radius: 0px !important;
+				border: none;
+				background: transparent;
+			}
+			body {
+				background-image: url(backgr22.png);
+				background-color: #985600;
+				background-repeat: repeat-x;
+				overflow-y: scroll;
+				padding: 1em;
+			}
+			#controls {
+				padding:       3px;
+				border-radius: 8px;
+				background:    #eae9e7;
+				margin: 0px auto;
+				width: 25em;
+				-webkit-box-shadow: 0px 0px 30px 0px rgba(50, 50, 50, 1);
+				-moz-box-shadow: 0px 0px 30px 0px rgba(50, 50, 50, 1);
+				box-shadow: 0px 0px 30px 0px rgba(50, 50, 50, 1);
+			}
+			#results {
+			}
+			#results .results {
+				padding-top: 15px;
+				padding-bottom: 15px;
+				margin:0px;
+			}
+			#results .results .item {
+				word-break: break-word;
+
+			    word-wrap: break-word;
+			    -ms-word-break: break-all;
+			    word-break: break-word;
+			    -ms-hyphens: auto;
+			    -moz-hyphens: auto;
+			    -webkit-hyphens: auto;
+			    hyphens: auto;
+			}
+		</style>
+	</head>
+	<body onload="init()">
+
+		<div id="controls">
+			<form class="input-group input-group-lg" style="margin:0px">
+				<span class="input-group-prepend">
+					<button class="btn" id="word-starts-btn" onclick="setCtrl('starts',!window.controls.starts); this.blur(); return !1">Alkaa</button>
+				</span>
+
+				<input class="form-control" id="word-str-input" type="value" style="text-align:center" onchange="setCtrl('str', this.value)">
+
+				<span class="input-group-prepend">
+					<button class="btn" id="word-ends-btn"   onclick="setCtrl('ends',  !window.controls.ends);   this.blur(); return !1">Loppuu</button>
+				</span>
+			</form>
+		</div>
+
+		<main id="container" class="container">
+			<article id="results"></article>
+		</main>
+
+		<script type="text/javascript">
+			console.time("Initiating!");
+
+			window.controls = {
+				starts : false,
+				ends   : false,
+				str    : ""
+			}
+
+			function init() {
+				try {
+					sanat = localStorage.getItem( "sanaristikko.sanat.txt" ) || null;
+				} catch (err) {
+					console.error( err );
+					throw "Unable to use LocalStorage";
+				}
+
+				if (typeof sanat == "string") return run( sanat );
+
+				var xhr = new window.XMLHttpRequest();
+				xhr.open( "GET", "kotus_sanat.txt" );
+				xhr.onreadystatechange = function( event ) {
+					if (xhr.readyState == 4 && xhr.status == 200) {
+						sanat = xhr.responseText.trim();
+						localStorage.setItem( "sanaristikko.sanat.txt", sanat );
+						run( sanat );
+					} else if (xhr.readyState == 4) {
+						console.error( event, xhr );
+						debugger;
+					} else {
+						console.log( event );
+					}
+				}
+				xhr.send()
+			}
+
+			function run( sanat ) {
+				console.timeEnd("Initiating!");
+
+				ready = true;
+				var wordregexp = /^[\wåäö]+$/;
+				window.SANAT = sanat.split("\n").map(v=>{
+					return (v=v.toLowerCase().trim()).match( wordregexp ) && v;
+				}).filter(v=>v);
+
+				var match = location.hash.match(/#?(\|?)([^\|]*)(\|?)/);
+				if (match) {
+					if (match[1] == "|") window.controls.starts = true;
+					if (match[3] == "|") window.controls.ends   = true;
+					if (match[2]) window.controls.str = match[2];
+					setCtrl();
+				}
+			}
+
+			function setCtrl( key, value ) {
+				if (key) window.controls[ key ] = value;
+
+				document.getElementById( "word-starts-btn" ).classList.remove( "active" );
+				document.getElementById( "word-starts-btn" ).classList.remove( "btn-outline-dark" );
+				document.getElementById( "word-ends-btn"   ).classList.remove( "active" );
+				document.getElementById( "word-ends-btn"   ).classList.remove( "btn-outline-dark" );
+
+				
+				var hash = document.getElementById("word-str-input").value = window.controls.str = window.controls.str.toLowerCase().trim();
+				if (window.controls.starts) {
+					document.getElementById( "word-starts-btn" ).classList.add( "active" );
+					document.getElementById( "word-starts-btn" ).classList.add( "btn-outline-dark" );
+					hash = "|"+hash;
+				}
+				if (window.controls.ends) {
+					document.getElementById( "word-ends-btn"   ).classList.add( "active" );
+					document.getElementById( "word-ends-btn"   ).classList.add( "btn-outline-dark" );
+					hash = hash+"|";
+				}
+
+				location.hash = hash;
+
+				runSearch();
+			}
+
+			function runSearch() {
+				var str = window.controls.str.trim();
+				if (str.length == 0) {
+					document.getElementById( "results" ).innerHTML = "";
+					return;
+				}
+
+				if (window.controls.starts) str = "^"+str;
+				if (window.controls.ends)   str = str+"$";
+				var regexp = new RegExp( str );
+
+				console.time( "Filtered!");
+				var result = window.SANAT.filter(v=>v.match( regexp ));
+				console.timeEnd( "Filtered!");
+				console.log( "Regexp:", regexp );
+				console.log( "Results:", result );
+
+				var html = [];
+				var total_count = result.length;
+				if (result.length > 100) {
+					console.warn( "Too many words. Aborting! (N="+ result.length +")" );
+					result = result.slice( 0,100 );
+				}
+				var count = result.length;
+				
+				if (count != total_count) {
+					html.push("<b>Tulos haulle "+ regexp.toString() +": (N="+ count +"/"+ total_count +")</b>");
+				} else {
+					html.push("<b>Tulos haulle "+ regexp.toString() +": (N="+ count +")</b>");
+				}
+
+				for (var word of result) html.push( word );
+
+				if (count != total_count) {
+					html.push("...");
+				} else {
+				}
+
+				
+				html = "<div class='results row'>" + html.map(v=>"<div class='item col-sm-4'>"+v+"</div>").join("\n") + "</div>";
+
+				document.getElementById( "results" ).innerHTML = html;
+			}
+
+		</script>
+	</body>
+</html>
